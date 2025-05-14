@@ -22,6 +22,10 @@ router.get("/all", async (req, res) => {
     };
   } else if (filters.priceFrom && !filters.priceTo) {
     where.price = { [Op.gte]: filters.priceFrom };
+  } else if(!filters.priceFrom && filters.priceTo) {
+    where.price = {
+      [Op.lte]: filters.priceTo
+    }
   }
 
   // if (filters.priceFrom && filters.priceTo) {
