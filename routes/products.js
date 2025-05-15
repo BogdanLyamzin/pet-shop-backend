@@ -1,76 +1,86 @@
 const express = require("express");
-const { Op } = require("sequelize");
+const { Op, fn, col, where, literal } = require("sequelize");
 
 const Product = require("../database/models/product");
 
 const parsePaginationParams = require("../utils/parsePaginationParams");
 const parseProductsFilterParams = require("../utils/parseProductsFilterParams");
+const Category = require("../database/models/category");
 
 const router = express.Router();
 
-router.get("/all", async (req, res) => {
-  const { page, limit } = parsePaginationParams(req.query);
-  const filters = parseProductsFilterParams(req.query);
+export const orderBy = {
+  "newest": [['createdAt', 'DESC']],
+  "low-high": [[literal('COALESCE(discont_price, price)'), 'ASC']],
+  "high-low": [[literal('COALESCE(discont_price, price)'), 'DESC']],
+  "default": [['createdAt', 'DESC']],
+};
 
-  const offset = (page - 1) * limit;
-
+export const createSortFilter = ({priceFrom, priceTo, discont}) => {
   const where = {};
-
-  if (filters.priceFrom && filters.priceTo) {
-    where.price = {
-      [Op.between]: [filters.priceFrom, filters.priceTo],
+  if (discont) {
+    where.discont_price = {
+      [Op.ne]: null
     };
-  } else if (filters.priceFrom && !filters.priceTo) {
-    where.price = { [Op.gte]: filters.priceFrom };
-  } else if(!filters.priceFrom && filters.priceTo) {
-    where.price = {
-      [Op.lte]: filters.priceTo
+
+    if (priceFrom || priceTo) {
+      where.discont_price = {
+        ...where.discont_price,
+        ...(priceFrom && { [Op.gte]: priceFrom }),
+        ...(priceTo && { [Op.lte]: priceTo })
+      };
+    }
+  } else {
+    where[Op.or] = [];
+
+    if (priceFrom || priceTo) {
+      where[Op.or].push({
+        discont_price: { [Op.ne]: null },
+        ...(priceFrom || priceTo) && {
+          discont_price: {
+            ...(priceFrom && { [Op.gte]: priceFrom }),
+            ...(priceTo && { [Op.lte]: priceTo })
+          }
+        }
+      });
+
+      where[Op.or].push({
+        discont_price: null,
+        ...(priceFrom || priceTo) && {
+          price: {
+            ...(priceFrom && { [Op.gte]: priceFrom }),
+            ...(priceTo && { [Op.lte]: priceTo })
+          }
+        }
+      });
     }
   }
+  return where;
+}
 
-  // if (filters.priceFrom && filters.priceTo) {
-  // where.price = {
-  //     [Op.between]: [priceFrom, priceTo]
-  // };
-  // } else if (priceFrom !== null) {
-  // where.price = {
-  //     [Op.gte]: priceFrom
-  // };
-  // } else if (priceTo !== null) {
-  // where.price = {
-  //     [Op.lte]: priceTo
-  // };
-  // }
-
-  const result = await Product.findAll({
-    offset,
-    limit,
-    where,
-  });
-
-  res.json(result);
-});
-
-router.get("/sale", async (req, res) => {
+router.get("/all", async (req, res) => {
   const { page, limit } = parsePaginationParams(req.query);
+  const {priceFrom, priceTo, discont} = parseProductsFilterParams(req.query);
+  const {sort} = req.query;
+
   const offset = (page - 1) * limit;
-  const data = await Product.findAll({
-    offset,
-    limit,
-    where: {
-      discont_price: {
-        [Op.ne]: null,
-      },
-    },
-  });
+
+  const where = createSortFilter({priceFrom, priceTo, discont});
+
+  const order = orderBy[sort] ? orderBy[sort] : orderBy.default;
 
   const total = await Product.count({
-    discont_price: {
-      [Op.ne]: null,
-    },
+    where
   });
 
   const totalPages = Math.ceil(total / limit);
+
+  const data = await Product.findAll({
+    offset,
+    limit,
+    where,
+    order,
+  });
 
   res.json({
     total,
@@ -94,12 +104,6 @@ router.get("/:id", async (req, res) => {
   }
 
   res.json(all);
-});
-
-router.get("/add/:title/:price/:discont_price/:description", (req, res) => {
-  const { title, price, discont_price, description } = req.params;
-  Product.create({ title, price, discont_price, description, categoryId: 1 });
-  res.json(`добавлено`);
 });
 
 module.exports = router;
