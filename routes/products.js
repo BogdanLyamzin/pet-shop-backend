@@ -1,62 +1,13 @@
 const express = require("express");
-const { Op, fn, col, where, literal } = require("sequelize");
 
 const Product = require("../database/models/product");
 
 const parsePaginationParams = require("../utils/parsePaginationParams");
 const parseProductsFilterParams = require("../utils/parseProductsFilterParams");
-const Category = require("../database/models/category");
+const orderBy = require("../utils/orderBy");
+const createSortFilter = require("../utils/createSortFilter");
 
 const router = express.Router();
-
-export const orderBy = {
-  "newest": [['createdAt', 'DESC']],
-  "low-high": [[literal('COALESCE(discont_price, price)'), 'ASC']],
-  "high-low": [[literal('COALESCE(discont_price, price)'), 'DESC']],
-  "default": [['createdAt', 'DESC']],
-};
-
-export const createSortFilter = ({priceFrom, priceTo, discont}) => {
-  const where = {};
-  if (discont) {
-    where.discont_price = {
-      [Op.ne]: null
-    };
-
-    if (priceFrom || priceTo) {
-      where.discont_price = {
-        ...where.discont_price,
-        ...(priceFrom && { [Op.gte]: priceFrom }),
-        ...(priceTo && { [Op.lte]: priceTo })
-      };
-    }
-  } else {
-    where[Op.or] = [];
-
-    if (priceFrom || priceTo) {
-      where[Op.or].push({
-        discont_price: { [Op.ne]: null },
-        ...(priceFrom || priceTo) && {
-          discont_price: {
-            ...(priceFrom && { [Op.gte]: priceFrom }),
-            ...(priceTo && { [Op.lte]: priceTo })
-          }
-        }
-      });
-
-      where[Op.or].push({
-        discont_price: null,
-        ...(priceFrom || priceTo) && {
-          price: {
-            ...(priceFrom && { [Op.gte]: priceFrom }),
-            ...(priceTo && { [Op.lte]: priceTo })
-          }
-        }
-      });
-    }
-  }
-  return where;
-}
 
 router.get("/all", async (req, res) => {
   const { page, limit } = parsePaginationParams(req.query);

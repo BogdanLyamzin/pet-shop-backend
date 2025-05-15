@@ -5,8 +5,8 @@ const Product = require("../database/models/product");
 
 const parsePaginationParams = require("../utils/parsePaginationParams");
 const parseProductsFilterParams = require("../utils/parseProductsFilterParams");
-import {createSortFilter} from "./products";
-import {orderBy} from "./products";
+const orderBy = require("../utils/orderBy");
+const createSortFilter = require("../utils/createSortFilter");
 
 const router = express.Router();
 
@@ -59,41 +59,31 @@ router.get("/:id", async (req, res) => {
     where
   });
 
-  const categoryRequest = await Category.findOne({ where: { id: normalizedId } });
+  const category = await Category.findOne({ where: { id: normalizedId } });
 
-  const totalPages = Math.ceil(total / limit);
-
-  const data = await Product.findAll({
+  const products = await Product.findAll({
     offset,
     limit,
     where,
     order,
   });
 
-  const productsRequest = Product.findAll({
-    where: { categoryId: normalizedId },
-  });
-
-  const [products, category] = await Promise.all([
-    productsRequest,
-    categoryRequest,
-  ]);
-
   if (!category) {
     res.status(404).json({ message: `Category with id=${id} not found` });
     return;
   }
 
+  const totalPages = Math.ceil(total / limit);
+
   res.json({
     total,
     totalPages,
-    data,
+    data: {
+      category,
+      products,
+    }
   });
 
-  res.json({
-    category,
-    data: products,
-  });
 });
 
 module.exports = router;
