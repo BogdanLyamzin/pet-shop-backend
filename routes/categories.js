@@ -55,11 +55,16 @@ router.get("/:id", async (req, res) => {
 
   const order = orderBy[sort] ? orderBy[sort] : orderBy.default;
 
+  const category = await Category.findOne({ where: { id: normalizedId } });
+
+  if (!category) {
+    res.status(404).json({ message: `Category with id=${id} not found` });
+    return;
+  }
+
   const total = await Product.count({
     where
   });
-
-  const category = await Category.findOne({ where: { id: normalizedId } });
 
   const products = await Product.findAll({
     offset,
@@ -67,11 +72,6 @@ router.get("/:id", async (req, res) => {
     where,
     order,
   });
-
-  if (!category) {
-    res.status(404).json({ message: `Category with id=${id} not found` });
-    return;
-  }
 
   const totalPages = Math.ceil(total / limit);
 
